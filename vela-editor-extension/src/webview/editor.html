@@ -1,0 +1,2157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"/>
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'none'; img-src vscode-webview: https: data:; style-src 'unsafe-inline' vscode-webview:; script-src 'unsafe-inline' vscode-webview:; font-src vscode-webview: data:;"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Vela 可视化编辑器</title>
+<style>
+  :root {
+    --bg: #1e1e1e;
+    --panel: #252526;
+    --panel-2: #2d2d30;
+    --border: #3e3e42;
+    --text: #cccccc;
+    --text-dim: #858585;
+    --accent: #007acc;
+    --accent-2: #0e639c;
+    --success: #4ec9b0;
+    --danger: #f48771;
+    --warning: #cca700;
+    --warn: #cca700;
+    --watchs4: #ff6b6b;
+    --band9pro: #4ecdc4;
+    --band9: #ffe66d;
+    --redmiwatch5: #a66cff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+    font-size: 13px;
+    overflow: hidden;
+  }
+
+  /* === 布局 === */
+  .app {
+    display: grid;
+    grid-template-rows: 48px 1fr;
+    grid-template-columns: 220px 1fr 300px;
+    grid-template-areas:
+      "toolbar toolbar toolbar"
+      "palette canvas inspector";
+    width: 100%; height: 100%;
+  }
+  .toolbar {
+    grid-area: toolbar;
+    display: flex; align-items: center; gap: 12px;
+    padding: 0 16px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+  }
+  .palette {
+    grid-area: palette;
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 12px;
+  }
+  .canvas-area {
+    grid-area: canvas;
+    background: #1a1a1a;
+    overflow: auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    position: relative;
+  }
+  .inspector {
+    grid-area: inspector;
+    background: var(--panel);
+    border-left: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 12px;
+  }
+
+  /* === 工具栏 === */
+  .logo {
+    font-weight: bold;
+    font-size: 15px;
+    background: linear-gradient(135deg, #ff6b6b, #a66cff);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-right: 12px;
+  }
+  .device-tabs {
+    display: flex; gap: 4px;
+    background: var(--panel-2);
+    padding: 3px;
+    border-radius: 6px;
+  }
+  .device-tab {
+    padding: 5px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 11px;
+    color: var(--text-dim);
+    transition: all .15s;
+    user-select: none;
+    white-space: nowrap;
+  }
+  .device-tab:hover { color: var(--text); }
+  .device-tab.active {
+    background: var(--accent);
+    color: #fff;
+  }
+  .device-tab[data-id="watchs4"].active { background: var(--watchs4); }
+  .device-tab[data-id="band9pro"].active { background: var(--band9pro); color:#111; }
+  .device-tab[data-id="band9"].active { background: var(--band9); color:#111; }
+  .device-tab[data-id="redmiwatch5"].active { background: var(--redmiwatch5); }
+
+  .toolbar-spacer { flex: 1; }
+  .btn {
+    padding: 6px 12px;
+    border-radius: 4px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    cursor: pointer;
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center; gap: 4px;
+    transition: all .15s;
+  }
+  .btn:hover { background: #3a3d41; border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { background: var(--accent-2); }
+  .btn.success { background: #0e633d; border-color: #0e633d; color:#fff; }
+  .btn.success:hover { background: #117743; }
+
+  /* === 组件面板 === */
+  .section-title {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    margin-bottom: 8px;
+    margin-top: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section-title:first-child { margin-top: 0; }
+  .comp-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px;
+  }
+  .comp-item {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 6px;
+    text-align: center;
+    cursor: grab;
+    transition: all .15s;
+    user-select: none;
+  }
+  .comp-item:hover {
+    border-color: var(--accent);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0,122,204,.3);
+  }
+  .comp-item:active { cursor: grabbing; }
+  .comp-icon {
+    width: 28px; height: 28px;
+    margin: 0 auto 6px;
+    border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px;
+    background: rgba(0,122,204,.15);
+    color: var(--accent);
+  }
+  .comp-label { font-size: 11px; color: var(--text); }
+
+  /* === 画布设备 === */
+  .device-wrapper {
+    position: relative;
+    transition: transform .2s;
+  }
+  .device-frame {
+    position: relative;
+    background: linear-gradient(145deg, #2a2a2a, #151515);
+    box-shadow:
+      0 0 0 2px #3a3a3a,
+      0 20px 60px rgba(0,0,0,.6),
+      inset 0 0 20px rgba(0,0,0,.3);
+  }
+  .device-screen {
+    position: relative;
+    background: #000;
+    overflow: hidden;
+  }
+  .device-screen.clip-circle {
+    clip-path: circle(50% at center);
+  }
+  .device-screen.clip-capsule {
+    clip-path: inset(0 round 50% / 50%);
+  }
+  .device-screen.clip-rect {
+    clip-path: inset(0 round var(--radius));
+  }
+  /* 安全区域提示 */
+  .safe-area-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    display: none;
+  }
+  .show-safe .safe-area-overlay { display: block; outline: 2px dashed rgba(255,255,0,.4); }
+
+  /* === 画布内元素渲染 === */
+  .canvas-root {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    background: #000;
+    overflow: hidden;
+  }
+  .node-el {
+    position: relative;
+    display: flex;
+    outline: 1px solid transparent;
+    cursor: pointer;
+    transition: outline-color .1s, opacity .2s;
+    word-break: break-all;
+    background: transparent;
+    color: #fff;
+    min-height: 20px;
+    min-width: 20px;
+    box-sizing: border-box;
+  }
+  .node-el, .node-el * {
+    box-sizing: border-box;
+  }
+  .node-el.if-hidden {
+    display: none;
+  }
+  .node-el.if-hidden::after {
+    content: '';
+  }
+  .node-el.show-hidden {
+    opacity: 0.2;
+    outline: 1px dashed var(--warn);
+    pointer-events: none;
+  }
+  .node-el.show-hidden::after {
+    content: 'show';
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    font-size: 9px;
+    background: var(--warn);
+    color: #000;
+    padding: 1px 3px;
+    border-radius: 3px;
+    z-index: 10;
+    pointer-events: none;
+  }
+  .node-el:hover {
+    outline-color: rgba(0,122,204,.6);
+    outline-style: dashed;
+    outline-width: 2px;
+    outline-offset: -1px;
+  }
+  .node-el.selected {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+    background: rgba(0,122,204,.08);
+  }
+  .node-el.drop-target {
+    outline: 2px dashed var(--success);
+    background: rgba(78,201,176,.1);
+  }
+
+  /* 空画布提示 */
+  .empty-canvas {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--text-dim); font-size: 12px;
+    pointer-events: none;
+  }
+
+  /* === 设备信息角标 === */
+  .device-info {
+    position: absolute;
+    top: -36px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    font-size: 11px;
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
+  .device-info .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+  }
+  .device-info .dot.watchs4 { background: var(--watchs4); }
+  .device-info .dot.band9pro { background: var(--band9pro); }
+  .device-info .dot.band9 { background: var(--band9); }
+  .device-info .dot.redmiwatch5 { background: var(--redmiwatch5); }
+
+  /* 缩放控制 */
+  .zoom-controls {
+    position: absolute;
+    bottom: 16px; right: 16px;
+    display: flex; gap: 4px;
+    background: rgba(0,0,0,.7);
+    padding: 4px;
+    border-radius: 6px;
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--border);
+  }
+  .zoom-btn {
+    width: 28px; height: 28px;
+    border: none;
+    background: var(--panel-2);
+    color: var(--text);
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+  }
+  .zoom-btn:hover { background: var(--accent); color:#fff; }
+  .zoom-value {
+    display: flex; align-items: center;
+    padding: 0 8px;
+    font-size: 11px;
+    color: var(--text-dim);
+    min-width: 48px;
+    justify-content: center;
+  }
+
+  /* 切换安全区按钮 */
+  .safe-btn {
+    position: absolute;
+    top: 16px; right: 16px;
+    font-size: 11px;
+  }
+
+  /* === 属性检查器 === */
+  .inspector-group {
+    margin-bottom: 16px;
+  }
+  .inspector-header {
+    display: flex; align-items: center;
+    justify-content: space-between;
+    padding: 6px 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text);
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 8px;
+  }
+  .prop-row {
+    display: grid;
+    grid-template-columns: 100px 1fr;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+  .prop-label {
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .prop-input, .prop-select {
+    width: 100%;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 5px 7px;
+    border-radius: 3px;
+    font-size: 12px;
+    font-family: inherit;
+  }
+  .prop-input:focus, .prop-select:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+  .color-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .color-picker {
+    width: 28px;
+    height: 28px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    background: transparent;
+    padding: 0;
+  }
+  .color-picker::-webkit-color-swatch-wrapper { padding: 0; }
+  .color-picker::-webkit-color-swatch { border: none; border-radius: 3px; }
+
+  .no-selection {
+    color: var(--text-dim);
+    font-size: 12px;
+    padding: 20px;
+    text-align: center;
+    background: var(--panel-2);
+    border-radius: 6px;
+    border: 1px dashed var(--border);
+  }
+
+  /* 节点树 */
+  .tree-node {
+    padding: 4px 6px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    display: flex; align-items: center; gap: 6px;
+    color: var(--text);
+    margin-left: calc(var(--depth) * 12px);
+  }
+  .tree-node:hover { background: var(--panel-2); }
+  .tree-node.selected { background: var(--accent); color:#fff; }
+  .tree-node.hidden-by-if { color: var(--text-dim); text-decoration: line-through; }
+  .tree-node.hidden-by-show { color: var(--warn); }
+  .tree-icon { color: var(--accent); opacity: .7; font-size: 10px; }
+  .tree-node.selected .tree-icon { color:#fff; opacity:1; }
+  .tree-node.hidden-by-if .tree-icon { color: var(--danger); }
+  .tree-node.hidden-by-show .tree-icon { color: var(--warn); }
+  .tree-vis {
+    margin-left: auto;
+    opacity: .5;
+    font-size: 13px;
+    cursor: pointer;
+    display: none;
+  }
+  .tree-node:hover .tree-vis { display: inline; }
+  .tree-vis:hover { opacity: 1; }
+  .dir-badge {
+    font-size: 9px;
+    padding: 1px 4px;
+    border-radius: 8px;
+    margin-left: 4px;
+    font-family: monospace;
+    white-space: nowrap;
+  }
+  .dir-if {
+    background: rgba(231, 76, 60, 0.2);
+    color: #e74c3c;
+    border: 1px solid rgba(231, 76, 60, 0.4);
+  }
+  .dir-show {
+    background: rgba(243, 196, 70, 0.2);
+    color: #f3c446;
+    border: 1px solid rgba(243, 196, 70, 0.4);
+  }
+  .tree-delete {
+    opacity: .5;
+    font-size: 14px;
+    color: var(--danger);
+    display: none;
+  }
+  .tree-node:hover .tree-delete { display: inline; }
+
+  /* 状态栏底部 */
+  .status-bar {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 22px;
+    padding: 0 12px;
+    background: rgba(0,0,0,.5);
+    color: var(--text-dim);
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-top: 1px solid var(--border);
+    backdrop-filter: blur(8px);
+  }
+  .status-bar .ok { color: var(--success); }
+  .status-bar .err { color: var(--danger); }
+
+  /* 模态提示 */
+  .toast {
+    position: fixed;
+    top: 64px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--panel-2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 8px 16px;
+    border-radius: 6px;
+    z-index: 9999;
+    box-shadow: 0 8px 32px rgba(0,0,0,.5);
+    animation: toastIn .25s ease;
+    font-size: 12px;
+  }
+  .toast.success { border-color: var(--success); }
+  .toast.error { border-color: var(--danger); }
+  @keyframes toastIn {
+    from { opacity: 0; transform: translate(-50%, -10px); }
+    to   { opacity: 1; transform: translate(-50%, 0); }
+  }
+
+  /* 滚动条 */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #555; }
+
+  /* 设备类型外形微调 */
+  .device-shape-watchs4 { border-radius: 50%; padding: 14px; }
+  .device-shape-band9pro { border-radius: 48px; padding: 10px; }
+  .device-shape-band9 { border-radius: 96px / 112px; padding: 8px; }
+  .device-shape-redmiwatch5 { border-radius: 56px; padding: 10px; }
+</style>
+</head>
+<body>
+
+<div class="app" id="app">
+  <!-- 顶部工具栏 -->
+  <div class="toolbar">
+    <div class="logo">◉ Vela 可视化编辑器</div>
+
+    <div class="device-tabs" id="deviceTabs">
+      <div class="device-tab active" data-id="band9pro" data-shape="rect" data-w="336" data-h="480">
+        手环 9 Pro
+      </div>
+      <div class="device-tab" data-id="band9" data-shape="capsule" data-w="192" data-h="490">
+        手环 9
+      </div>
+      <div class="device-tab" data-id="watchs4" data-shape="circle" data-w="466" data-h="466">
+        手表 S4
+      </div>
+      <div class="device-tab" data-id="redmiwatch5" data-shape="rect" data-w="432" data-h="514">
+        Redmi 5
+      </div>
+    </div>
+
+    <div class="toolbar-spacer"></div>
+
+    <button class="btn" id="btnPreview" title="刷新预览">🔄 刷新预览</button>
+    <button class="btn" id="btnNew" title="新建空白页">📄 新页面</button>
+    <button class="btn primary" id="btnApply" title="将修改写回VS Code编辑器">✏️ 应用代码</button>
+    <button class="btn success" id="btnSave" title="保存文件">💾 保存文件</button>
+  </div>
+
+  <!-- 左侧组件面板 -->
+  <div class="palette">
+    <div class="section-title">基础组件（拖入画布）</div>
+    <div class="comp-grid" id="compGrid">
+      <!-- 由 JS 填充 -->
+    </div>
+
+    <div class="section-title">容器组件</div>
+    <div class="comp-grid" id="containerGrid">
+      <!-- 由 JS 填充 -->
+    </div>
+
+    <div class="section-title">节点结构</div>
+    <div id="treeView" style="margin-bottom:12px;"></div>
+  </div>
+
+  <!-- 中间画布区 -->
+  <div class="canvas-area" id="canvasArea">
+    <button class="btn safe-btn" id="btnSafe">👁 安全区</button>
+
+    <div class="zoom-controls">
+      <button class="zoom-btn" id="zoomOut">−</button>
+      <div class="zoom-value" id="zoomVal">80%</div>
+      <button class="zoom-btn" id="zoomIn">+</button>
+      <button class="zoom-btn" id="zoomFit" title="适应画布">⛶</button>
+    </div>
+
+    <div class="device-wrapper" id="deviceWrapper">
+      <div class="device-info" id="deviceInfo">
+        <span class="dot band9pro" id="devDot"></span>
+        <span id="devName">Xiaomi Band 9 Pro</span>
+        <span style="opacity:.5">|</span>
+        <span id="devRes">336 × 480</span>
+        <span style="opacity:.5">|</span>
+        <span id="devShape">矩形屏</span>
+      </div>
+
+      <div class="device-frame device-shape-band9pro" id="deviceFrame">
+        <div class="device-screen clip-rect" id="deviceScreen"
+             style="--radius: 28px; width: 336px; height: 480px;">
+          <div class="canvas-root" id="canvasRoot"></div>
+          <div class="safe-area-overlay" id="safeOverlay"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="status-bar">
+      <span id="statusLeft">就绪</span>
+      <span id="statusRight" class="ok">已加载</span>
+    </div>
+  </div>
+
+  <!-- 右侧属性检查器 -->
+  <div class="inspector" id="inspector">
+    <div class="inspector-group">
+      <div class="inspector-header">数据联动</div>
+      <div id="dataPanel">
+        <div class="no-selection">加载文件后显示条件变量</div>
+      </div>
+    </div>
+
+    <div class="inspector-group">
+      <div class="inspector-header">元素属性</div>
+      <div id="propsContent">
+        <div class="no-selection">
+          从左侧拖入组件<br>或点击画布上的元素<br>以编辑其属性
+        </div>
+      </div>
+    </div>
+
+    <div class="inspector-group">
+      <div class="inspector-header">样式编辑</div>
+      <div id="styleContent">
+        <div class="no-selection">选中一个元素后可编辑样式</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const vscode = acquireVsCodeApi ? acquireVsCodeApi() : null;
+
+  // ========== 状态 ==========
+  const STATE = {
+    currentDevice: {
+      id: 'band9pro', name: 'Xiaomi Band 9 Pro',
+      shape: 'rect', width: 336, height: 480, scale: 0.8
+    },
+    tree: null,
+    styleClasses: {},
+    selectedKey: null,
+    keyCounter: 1,
+    fileUri: null,
+    rawContent: '',
+    directiveVars: [],
+    evalData: {},
+    imports: []
+  };
+
+  // ========== 组件库定义 ==========
+  const COMPONENTS = [
+    { key: 'text', label: '文本', icon: 'T', category: 'basic',
+      defaultAttrs: { value: '文本' },
+      defaultStyles: { 'font-size': '24px', color: '#ffffff', 'font-weight': 'normal' }
+    },
+    { key: 'title', label: '标题', icon: 'Aa', category: 'basic',
+      defaultAttrs: { value: '标题文字' },
+      defaultStyles: { 'font-size': '30px', color: '#ffffff', 'font-weight': 'bold' }
+    },
+    { key: 'time', label: '时间', icon: '⏱', category: 'basic',
+      defaultAttrs: { value: '14:29' },
+      defaultStyles: { 'font-size': '28px', color: '#ffffff', 'font-weight': 'bold' }
+    },
+    { key: 'image', label: '图片', icon: '🖼', category: 'basic',
+      defaultAttrs: { src: '/common/logo.png' },
+      defaultStyles: { width: '60px', height: '60px', 'border-radius': '8px' }
+    },
+    { key: 'progress', label: '进度条', icon: '▰', category: 'basic',
+      defaultAttrs: { value: '60', type: 'horizontal' },
+      defaultStyles: { width: '200px', height: '8px', color: '#0077ff' }
+    },
+    { key: 'div', label: '容器', icon: '▢', category: 'container',
+      defaultAttrs: {},
+      defaultStyles: {
+        width: '100px', height: '60px',
+        'background-color': '#333333',
+        'border-radius': '10px',
+        'flex-direction': 'row',
+        'justify-content': 'center',
+        'align-items': 'center'
+      }
+    },
+    { key: 'stack', label: '堆栈', icon: '▤', category: 'container',
+      defaultAttrs: {},
+      defaultStyles: {
+        width: '100%', height: '100%',
+        'flex-direction': 'column',
+        'justify-content': 'flex-start',
+        'align-items': 'center',
+        'background-color': '#000000'
+      }
+    },
+    { key: 'scroll', label: '滚动', icon: '⬇', category: 'container',
+      defaultAttrs: { 'scroll-y': 'true' },
+      defaultStyles: { width: '100%', flex: '1' }
+    },
+    { key: 'list', label: '列表', icon: '☰', category: 'container',
+      defaultAttrs: {},
+      defaultStyles: { width: '100%', flex: '1', 'flex-direction': 'column' }
+    }
+  ];
+
+  // ========== 工具函数 ==========
+  const nextKey = () => `n${STATE.keyCounter++}`;
+
+  function toast(msg, type='') {
+    const t = document.createElement('div');
+    t.className = 'toast ' + type;
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 2200);
+  }
+
+  function genId() { return Math.random().toString(36).slice(2,9); }
+
+  function findNode(key, node = STATE.tree, path = []) {
+    if (!node) return null;
+    if (node.__key === key) return { node, path, parent: null };
+    for (let i = 0; i < (node.children || []).length; i++) {
+      const ch = node.children[i];
+      const found = findNode(key, ch, [...path, i]);
+      if (found) return { ...found, parent: node, parentIndex: i };
+    }
+    return null;
+  }
+
+  // ========== 初始化组件面板 ==========
+  function initPalette() {
+    const basic = document.getElementById('compGrid');
+    const cont  = document.getElementById('containerGrid');
+    COMPONENTS.forEach(c => {
+      const el = document.createElement('div');
+      el.className = 'comp-item';
+      el.draggable = true;
+      el.dataset.comp = JSON.stringify(c);
+      el.innerHTML = `<div class="comp-icon">${c.icon}</div><div class="comp-label">${c.label}</div>`;
+      el.addEventListener('dragstart', e => {
+        e.dataTransfer.setData('application/x-vela-comp', JSON.stringify(c));
+        e.dataTransfer.effectAllowed = 'copy';
+      });
+      (c.category === 'basic' ? basic : cont).appendChild(el);
+    });
+  }
+
+  // ========== 切换设备 ==========
+  function initDeviceTabs() {
+    const tabs = document.querySelectorAll('.device-tab');
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        tabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        const id = tab.dataset.id;
+        const w = parseInt(tab.dataset.w, 10);
+        const h = parseInt(tab.dataset.h, 10);
+        const shape = tab.dataset.shape;
+        STATE.currentDevice = { id, shape, width: w, height: h, scale: STATE.currentDevice.scale };
+        renderDevice();
+      });
+    });
+  }
+
+  function renderDevice() {
+    const d = STATE.currentDevice;
+    const frame = document.getElementById('deviceFrame');
+    const screen = document.getElementById('deviceScreen');
+    const dot = document.getElementById('devDot');
+    dot.className = 'dot ' + d.id;
+    document.getElementById('devName').textContent = ({
+      watchs4: 'Xiaomi Watch S4',
+      band9pro: 'Xiaomi Band 9 Pro',
+      band9: 'Xiaomi Band 9',
+      redmiwatch5: 'Redmi Watch 5'
+    })[d.id];
+    document.getElementById('devRes').textContent = `${d.width} × ${d.height}`;
+    document.getElementById('devShape').textContent = ({
+      circle: '圆形屏', rect: '矩形屏', capsule: '胶囊屏'
+    })[d.shape];
+
+    frame.className = 'device-frame device-shape-' + d.id;
+    screen.className = 'device-screen clip-' + d.shape;
+    let radius = '8px';
+    if (d.id === 'band9pro') radius = '28px';
+    if (d.id === 'redmiwatch5') radius = '36px';
+    screen.style.setProperty('--radius', radius);
+    screen.style.width = d.width + 'px';
+    screen.style.height = d.height + 'px';
+
+    applyScale();
+    renderTree();
+  }
+
+  function applyScale() {
+    const s = STATE.currentDevice.scale;
+    document.getElementById('deviceWrapper').style.transform = `scale(${s})`;
+    document.getElementById('zoomVal').textContent = `${Math.round(s * 100)}%`;
+  }
+
+  // ========== 缩放 ==========
+  function initZoom() {
+    document.getElementById('zoomIn').onclick = () => {
+      STATE.currentDevice.scale = Math.min(2, STATE.currentDevice.scale + 0.1);
+      applyScale();
+    };
+    document.getElementById('zoomOut').onclick = () => {
+      STATE.currentDevice.scale = Math.max(0.3, STATE.currentDevice.scale - 0.1);
+      applyScale();
+    };
+    document.getElementById('zoomFit').onclick = () => {
+      const area = document.getElementById('canvasArea');
+      const availW = area.clientWidth - 80;
+      const availH = area.clientHeight - 120;
+      const sw = availW / STATE.currentDevice.width;
+      const sh = availH / STATE.currentDevice.height;
+      STATE.currentDevice.scale = Math.min(sw, sh, 1);
+      applyScale();
+    };
+  }
+
+  // ========== 画布拖放 ==========
+  function initCanvasDrop() {
+    const screen = document.getElementById('deviceScreen');
+    let currentTarget = null;
+
+    screen.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      const hit = document.elementFromPoint(e.clientX, e.clientY);
+      const nodeEl = hit?.closest('.node-el');
+      if (currentTarget) currentTarget.classList.remove('drop-target');
+      currentTarget = nodeEl;
+      if (currentTarget) currentTarget.classList.add('drop-target');
+    });
+
+    screen.addEventListener('dragleave', e => {
+      // 若离开画布，清除高亮
+      if (!screen.contains(e.relatedTarget)) {
+        if (currentTarget) { currentTarget.classList.remove('drop-target'); currentTarget = null; }
+      }
+    });
+
+    screen.addEventListener('drop', e => {
+      e.preventDefault();
+      if (currentTarget) currentTarget.classList.remove('drop-target');
+      const compStr = e.dataTransfer.getData('application/x-vela-comp');
+      if (!compStr) return;
+      const comp = JSON.parse(compStr);
+
+      // 确定插入目标：
+      // 优先放入 currentTarget（鼠标悬停的节点）；若无则放入根
+      let parentKey = currentTarget ? currentTarget.dataset.key : (STATE.tree?.__key || null);
+
+      if (!STATE.tree && comp.category === 'container') {
+        // 空画布放入容器作为根
+        addRoot(comp);
+      } else if (!STATE.tree) {
+        // 空画布先放 stack 再放入组件
+        const stackComp = COMPONENTS.find(c => c.key === 'stack');
+        addRoot(stackComp);
+        addChild(STATE.tree.__key, comp);
+      } else {
+        addChild(parentKey, comp);
+      }
+    });
+
+    // 安全区切换
+    document.getElementById('btnSafe').onclick = () => {
+      document.getElementById('canvasArea').classList.toggle('show-safe');
+    };
+  }
+
+  function addRoot(comp) {
+    STATE.keyCounter = 1;
+    const key = nextKey();
+    STATE.tree = {
+      __key: key,
+      __comp: comp.key,
+      tag: comp.key,
+      attrs: { ...comp.defaultAttrs },
+      events: {},
+      directives: {},
+      classNames: [genClassName(comp.key)],
+      styles: { ...comp.defaultStyles },
+      children: []
+    };
+    STATE.styleClasses[STATE.tree.classNames[0]] = { ...comp.defaultStyles };
+    renderTree();
+  }
+
+  function addChild(parentKey, comp) {
+    const f = findNode(parentKey);
+    if (!f) return;
+    const key = nextKey();
+    const className = genClassName(comp.key);
+    const node = {
+      __key: key,
+      __comp: comp.key,
+      tag: comp.key,
+      attrs: { ...comp.defaultAttrs },
+      events: {},
+      directives: {},
+      classNames: [className],
+      styles: { ...comp.defaultStyles },
+      children: comp.key === 'button' ? [makeButtonTextChild()] : []
+    };
+    STATE.styleClasses[className] = { ...comp.defaultStyles };
+    f.node.children.push(node);
+    STATE.selectedKey = key;
+    renderTree();
+  }
+
+  function makeButtonTextChild() {
+    const k = nextKey();
+    const cls = genClassName('btntext');
+    STATE.styleClasses[cls] = { 'font-size': '22px', color: '#ffffff', 'font-weight': 'bold' };
+    return {
+      __key: k, __comp: 'text', tag: 'text',
+      attrs: { value: '按钮' },
+      events: {}, directives: {},
+      classNames: [cls],
+      styles: { ...STATE.styleClasses[cls] },
+      children: []
+    };
+  }
+
+  function genClassName(prefix) {
+    const used = new Set(Object.keys(STATE.styleClasses));
+    let i = 1, n;
+    do { n = `${prefix}-${i++}`; } while (used.has(n));
+    return n;
+  }
+
+  function parseIfExpressionClient(val) {
+    if (!val) return null;
+    const expr = val.trim();
+    if (expr === 'true' || expr === '1') return { variable: '__literal__', compareValue: 'true', raw: expr, kind: 'literal' };
+    if (expr === 'false' || expr === '0' || expr === '') return { variable: '__literal__', compareValue: 'false', raw: expr, kind: 'literal' };
+    const tmplMatch = expr.match(/^\{\{\s*([^}]+)\s*\}\}$/);
+    if (!tmplMatch) return null;
+    const inner = tmplMatch[1].trim();
+    if (inner.includes('&&') || inner.includes('||')) {
+      return { variable: '__complex__', compareValue: null, raw: inner, kind: 'complex' };
+    }
+    // 处理 !var
+    const notMatch = inner.match(/^!\s*(\w+)$/);
+    if (notMatch) return { variable: notMatch[1], compareValue: null, raw: inner, kind: 'not' };
+    const simpleVar = inner.match(/^(\w+)\s*$/);
+    if (simpleVar) return { variable: simpleVar[1], compareValue: null, raw: inner, kind: 'variable' };
+    // 处理 === 和 ==
+    const eqMatch = inner.match(/^(\w+)\s*=?==\s*(.+)$/);
+    if (eqMatch) {
+      let cmpVal = eqMatch[2].trim();
+      if ((cmpVal.startsWith('"') && cmpVal.endsWith('"')) || (cmpVal.startsWith("'") && cmpVal.endsWith("'"))) {
+        cmpVal = cmpVal.slice(1, -1);
+      }
+      return { variable: eqMatch[1], compareValue: cmpVal, raw: inner, kind: 'compare' };
+    }
+    return { variable: '__unknown__', compareValue: null, raw: inner, kind: 'complex' };
+  }
+
+  function evaluateDirectiveClient(val, data) {
+    if (!val) return true;
+    const parsed = parseIfExpressionClient(val);
+    if (!parsed) return true;
+
+    if (parsed.variable === '__literal__') {
+      return parsed.compareValue === 'true';
+    }
+
+    // 处理 !var
+    if (parsed.kind === 'not') {
+      const v = data[parsed.variable];
+      return !v;
+    }
+
+    if (parsed.variable !== '__complex__' && parsed.variable !== '__unknown__' && parsed.compareValue === null) {
+      const val = data[parsed.variable];
+      if (val === undefined || val === null) return false;
+      return Boolean(val);
+    }
+
+    if (parsed.compareValue !== null) {
+      const val = data[parsed.variable];
+      if (val === undefined) return false;
+      const numVal = Number(val);
+      const numCmp = Number(parsed.compareValue);
+      if (!isNaN(numVal) && !isNaN(numCmp)) {
+        return numVal === numCmp;
+      }
+      return String(val) === parsed.compareValue;
+    }
+
+    if (parsed.raw) {
+      try {
+        return evaluateComplexClient(parsed.raw, data);
+      } catch {
+        return true;
+      }
+    }
+    return true;
+  }
+
+  function evaluateComplexClient(expr, data) {
+    let jsExpr = expr;
+    // 替换 {{var===value}} 和 {{var}}
+    jsExpr = jsExpr.replace(/\{\{\s*([^}]+)\s*\}\}/g, (_, inner) => {
+      let s = inner.trim();
+      // 替换变量为值
+      s = s.replace(/!\s*([a-zA-Z_]\w*)/g, (_, vn) => {
+        const v = data[vn];
+        return !v ? 'true' : 'false';
+      });
+      s = s.replace(/[a-zA-Z_]\w*/g, m => {
+        if (['true', 'false', '&&', '||', '===', '==', '!=', '!', '(', ')'].includes(m)) return m;
+        const v = data[m];
+        if (v === undefined) return 'null';
+        return typeof v === 'string' ? `"${v}"` : JSON.stringify(v);
+      });
+      return s;
+    });
+    // 处理 !var 不在 {{}} 中的情况
+    jsExpr = jsExpr.replace(/!\s*([a-zA-Z_]\w*)/g, (_, vn) => {
+      const v = data[vn];
+      return !v ? 'true' : 'false';
+    });
+    // 替换剩余变量
+    jsExpr = jsExpr.replace(/\b([a-zA-Z_]\w*)\b/g, (m) => {
+      if (['true', 'false', '&&', '||', '===', '==', '!=', '!', '(', ')'].includes(m)) return m;
+      const v = data[m];
+      if (v === undefined) return 'null';
+      return typeof v === 'string' ? `"${v}"` : JSON.stringify(v);
+    });
+    try {
+      const result = Function(`"use strict"; return (${jsExpr});`)();
+      return Boolean(result);
+    } catch {
+      return true;
+    }
+  }
+
+  function reEvaluateTree(node, data) {
+    if (!node) return;
+    const directives = node.directives || {};
+    const hasIf = 'if' in directives;
+    const hasShow = 'show' in directives;
+
+    if (hasIf) {
+      node._if = evaluateDirectiveClient(directives['if'], data);
+    }
+    if (hasShow) {
+      node._show = evaluateDirectiveClient(directives['show'], data);
+    }
+    // 重新计算可见性
+    node.visible = (hasIf ? node._if : true) && (hasShow ? node._show : true);
+
+    // 重新评估数据绑定
+    if (node.attrs) {
+      for (const k in node.attrs) {
+        if (typeof node.attrs[k] === 'string') {
+          node.attrs[k] = node.attrs[k].replace(/\{\{\s*([^}]+)\s*\}\}/g, (_, key) => {
+            if (data[key] !== undefined) return String(data[key]);
+            return '{{' + key + '}}';
+          });
+        }
+      }
+    }
+
+    (node.children || []).forEach(c => reEvaluateTree(c, data));
+  }
+
+  function deleteNode(key) {
+    const f = findNode(key);
+    if (!f || !f.parent) {
+      STATE.tree = null;
+      STATE.selectedKey = null;
+      renderTree();
+      return;
+    }
+    f.parent.children.splice(f.parentIndex, 1);
+    STATE.selectedKey = null;
+    renderTree();
+  }
+
+  function toggleNodeVisibility(node) {
+    const directives = node.directives || {};
+    const hasIf = 'if' in directives;
+    const hasShow = 'show' in directives;
+    const parsedIf = node._ifParsed;
+
+    if (hasIf) {
+      // 如果有 if 指令，优先切换 if 状态
+      node._if = !node._if;
+      // 当 if 被强制设为 true 时，同时检查 show
+      node.visible = node._if && (node._show !== false);
+    } else if (hasShow) {
+      // 只有 show 指令时切换 show
+      node._show = !node._show;
+      node.visible = (node._if !== false) && node._show;
+    }
+    renderTree();
+  }
+
+  function updateNodeVisibility(node) {
+    const directives = node.directives || {};
+    const hasIf = 'if' in directives;
+    const hasShow = 'show' in directives;
+    // _if === false 表示 if 条件不成立 → 节点完全不可见
+    // _if === true 或 null 表示可见
+    const ifV = hasIf ? (node._if === false ? false : true) : true;
+    // _show === false 表示 show 条件不成立 → 节点隐藏但保留布局
+    const showV = hasShow ? (node._show === false ? false : true) : true;
+    node.visible = ifV && showV;
+  }
+
+  // ========== 渲染树到画布 ==========
+  function renderTree() {
+    const root = document.getElementById('canvasRoot');
+    root.innerHTML = '';
+    if (!STATE.tree) {
+      const hint = document.createElement('div');
+      hint.className = 'empty-canvas';
+      hint.innerHTML = '← 从左侧拖入组件开始设计<br>建议先放 <b>stack</b> 或 <b>div</b> 作为容器';
+      root.appendChild(hint);
+      renderDataPanel();
+      renderInspector();
+      renderTreeView();
+      return;
+    }
+    root.appendChild(renderNodeEl(STATE.tree));
+    renderDataPanel();
+    renderInspector();
+    renderTreeView();
+  }
+
+  function renderNodeEl(node) {
+    const directives = node.directives || {};
+    const hasIf = 'if' in directives;
+    const hasShow = 'show' in directives;
+    const tag = node.tag || node.type || 'div';
+
+    // 自定义导入组件（如 input-method）→ 画布中不渲染
+    const isImportedComp = STATE.imports.some(im => im.name === tag);
+    if (isImportedComp) {
+      return null;
+    }
+
+    // if 条件不成立 → 完全从画布移除（不渲染 DOM 节点）
+    if (hasIf && node._if === false) {
+      return null;
+    }
+
+    const el = document.createElement('div');
+    el.className = 'node-el' + (node.__key === STATE.selectedKey ? ' selected' : '');
+    el.dataset.key = node.__key;
+    applyNodeStyle(el, node);
+
+    // show 条件不成立 → 保留布局位置但隐藏内容
+    if (hasShow && node._show === false) {
+      el.classList.add('show-hidden');
+      el.title = '条件隐藏：show="' + directives['show'] + '"';
+    }
+
+    // 文本特殊渲染（用 value 属性）
+    if (tag === 'text') {
+      el.textContent = node.attrs.value || '';
+      // Vela text 默认：nowrap，超出裁剪
+      const s = node.styles || {};
+      const hasExplicitWrap = s['flex-wrap'] === 'wrap' || s.lines !== undefined;
+      if (!hasExplicitWrap) {
+        el.style.whiteSpace = 'nowrap';
+        el.style.overflow = 'hidden';
+        el.style.textOverflow = s['text-overflow'] || 'ellipsis';
+      }
+      // 默认文字颜色为白色（Vela 穿戴设备通常深色背景）
+      if (!s.color) el.style.color = '#ffffff';
+    } else if (tag === 'image') {
+      el.innerHTML = '<div style="' +
+        'width:100%;height:100%;display:flex;align-items:center;justify-content:center;' +
+        'background: repeating-linear-gradient(45deg,#2a2a2a,#2a2a2a 6px,#333 6px,#333 12px);' +
+        'color:#666;font-size:11px;border-radius:inherit;' +
+        '">' + (node.attrs.src ? '🖼 ' + (node.attrs.src.split('/').pop() || 'image') : 'Image') + '</div>';
+    } else {
+      let zCounter = 0;
+      (node.children || []).forEach((c) => {
+        // stack 中：show 条件不成立的直接子组件也完全移出画布（与 if 一致）
+        if (tag === 'stack') {
+          const cdir = c.directives || {};
+          if ('show' in cdir && c._show === false) return;
+        }
+        const childEl = renderNodeEl(c);
+        if (childEl) {
+          // stack 容器的子组件：绝对定位层叠排列
+          if (tag === 'stack') {
+            zCounter++;
+            const cs = c.styles || {};
+            // stack 子组件一律强制 absolute 定位（包括 fixed），
+            // 因为 Web 中 fixed 是相对 webview viewport，而 Vela 中 stack 的 fixed 等价于 absolute 相对 stack
+            childEl.style.position = 'absolute';
+            if (!cs.top && !cs.bottom) childEl.style.top = '0';
+            if (!cs.left && !cs.right) childEl.style.left = '0';
+            if (!cs.width) childEl.style.width = '100%';
+            if (!cs.height) childEl.style.height = '100%';
+            // 修正超范围的 top：如果 top%>=100 说明意图是贴底或超界，改用 bottom 对齐
+            const topStr = cs.top;
+            if (topStr !== undefined && topStr !== null && String(topStr).endsWith('%')) {
+              const topPct = parseFloat(topStr);
+              if (!isNaN(topPct) && topPct >= 100) {
+                childEl.style.removeProperty('top');
+                if (!cs.bottom) childEl.style.bottom = '0';
+              }
+            }
+            // 后渲染的在上层（覆盖前一个）
+            childEl.style.zIndex = String(zCounter);
+          }
+          el.appendChild(childEl);
+        }
+      });
+    }
+
+    el.addEventListener('click', e => {
+      e.stopPropagation();
+      STATE.selectedKey = node.__key;
+      renderTree();
+    });
+
+    return el;
+  }
+
+  function applyNodeStyle(el, node) {
+    const s = node.styles || {};
+    const tag = node.tag || node.type || 'div';
+
+    // 节点如果有 absolute/fixed 定位，需要父容器是 relative
+    const isPositioned = s.position === 'absolute' || s.position === 'fixed';
+    if (isPositioned) {
+      // 设置父节点为 relative
+      const parent = el.parentElement;
+      if (parent && parent !== el && parent.classList && !parent.style.position) {
+        parent.style.position = 'relative';
+      }
+    }
+
+    for (const k in s) {
+      let v = s[k];
+      // Vela 特殊属性处理
+      if (k === 'lines') continue;  // Vela 行数限制，Web CSS 不直接支持
+      if (k === 'text-overflow') {
+        el.style.textOverflow = v;
+        continue;
+      }
+      if (k === 'position') {
+        // Vela fixed 的处理：
+        // - 如果有 top/bottom/left/right 任一偏移 → 等价于 absolute 相对画布/祖先
+        // - 如果没有任何偏移（只借 fixed 语义来撑宽高/层级）→ 保留 static，让其参与父级 flex 流
+        if (v === 'fixed') {
+          const hasOffset = (
+            s.top !== undefined || s.bottom !== undefined ||
+            s.left !== undefined || s.right !== undefined
+          );
+          el.style.position = hasOffset ? 'absolute' : 'static';
+        } else {
+          el.style.position = v;
+        }
+        continue;
+      }
+      // Vela 的 flex 属性
+      if (k === 'flex') {
+        // Vela flex:1 -> web flex:1; Vela flex: 0 0 auto -> web equivalents
+        el.style.flex = v;
+        continue;
+      }
+      // Vela 的 flex-shrink
+      if (k === 'flex-shrink') {
+        el.style.flexShrink = v;
+        continue;
+      }
+      // Vela 的 flex-grow
+      if (k === 'flex-grow') {
+        el.style.flexGrow = v;
+        continue;
+      }
+      // Vela 的 flex-basis
+      if (k === 'flex-basis') {
+        el.style.flexBasis = v;
+        continue;
+      }
+      // box-sizing
+      if (k === 'box-sizing') {
+        el.style.boxSizing = v;
+        continue;
+      }
+      // overflow
+      if (k === 'overflow-y') {
+        el.style.overflowY = v;
+        continue;
+      }
+      if (k === 'overflow-x') {
+        el.style.overflowX = v;
+        continue;
+      }
+      // Vela 中 top/left/right/bottom 配合 absolute/fixed 使用
+      if (k === 'top' || k === 'left' || k === 'right' || k === 'bottom') {
+        el.style.setProperty(k, v);
+        continue;
+      }
+      // 通用属性直接应用
+      el.style.setProperty(k, v);
+    }
+
+    // 容器默认：display:flex
+    const isContainer = ['div', 'scroll', 'list'].includes(tag);
+    if (isContainer) {
+      if (!s.display) el.style.display = 'flex';
+      // Vela 默认 flex-direction: column
+      if (!s['flex-direction']) {
+        el.style.flexDirection = 'column';
+      }
+      // scroll 和 list 默认纵向滚动
+      if (tag === 'scroll' && !s['overflow-y'] && !s['overflow']) {
+        el.style.overflowY = 'auto';
+      }
+      if (tag === 'list' && !s['overflow-y'] && !s['overflow']) {
+        el.style.overflowY = 'auto';
+      }
+
+      // 在 flex 容器中，如果子节点有 height:100%，转为 flex:1 使其正确填充
+      const parent = el.parentElement;
+      if (parent) {
+        let parentDisplay = parent.style.display;
+        if (!parentDisplay && window.getComputedStyle) {
+          parentDisplay = window.getComputedStyle(parent).display;
+        }
+        if (parentDisplay === 'flex') {
+          const h = s['height'];
+          if (h === '100%' || h === 'auto') {
+            el.style.removeProperty('height');
+            el.style.flex = '1';
+          }
+        }
+      }
+    }
+
+    // stack 容器：强制层叠排列，使用 absolute 定位（忽略用户 CSS 中的 display:flex）
+    if (tag === 'stack') {
+      el.style.display = 'block';
+      el.style.position = 'relative';
+      el.style.width = '100%';
+      el.style.height = '100%';
+      if (!s['min-height']) el.style.minHeight = '40px';
+    }
+
+    // 根 stack/page 节点默认黑色背景
+    const isRoot = node.classNames && node.classNames.some(c => c === 'stack' || c === 'page');
+    if (isRoot && !s['background-color']) {
+      el.style.backgroundColor = '#000000';
+    }
+
+    // 文本默认白色
+    if (tag === 'text' && !s.color) {
+      el.style.color = '#ffffff';
+    }
+  }
+
+  // ========== 属性检查器 ==========
+  function renderDataPanel() {
+    const panel = document.getElementById('dataPanel');
+    if (!panel) return;
+
+    if (!STATE.directiveVars || STATE.directiveVars.length === 0) {
+      panel.innerHTML = '<div style="color:var(--text-dim);font-size:12px;padding:8px;">暂无条件变量</div>';
+      return;
+    }
+
+    const vars = STATE.directiveVars;
+    panel.innerHTML = '';
+    const el = document.createElement('div');
+    el.style.padding = '8px';
+
+    // 按类型分组
+    const groups = { boolean: [], number: [], string: [], any: [] };
+    vars.forEach(v => {
+      if (!groups[v.type]) groups.any.push(v);
+      else groups[v.type].push(v);
+    });
+
+    let html = '';
+
+    // 布尔型
+    if (groups.boolean.length > 0) {
+      html += '<div style="margin-bottom:10px;">';
+      html += '<div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;font-weight:bold;">布尔型</div>';
+      groups.boolean.forEach(v => {
+        const val = STATE.evalData[v.name];
+        html += '<label style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;cursor:pointer;">' +
+          '<input type="checkbox" data-var="' + v.name + '" data-type="boolean" ' + (val ? 'checked' : '') + ' style="cursor:pointer;"/>' +
+          '<span style="flex:1;">' + v.name + '</span>' +
+          '<span style="font-size:10px;color:' + (val ? 'var(--success)' : 'var(--danger)') + ';">' + (val ? 'true' : 'false') + '</span>' +
+          '</label>';
+      });
+      html += '</div>';
+    }
+
+    // 数值型
+    if (groups.number.length > 0) {
+      html += '<div style="margin-bottom:10px;">';
+      html += '<div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;font-weight:bold;">数值型</div>';
+      groups.number.forEach(v => {
+        const val = STATE.evalData[v.name] ?? 0;
+        const choices = v.compareValues && v.compareValues.length > 0 ? [...new Set(v.compareValues)] : null;
+        html += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;">' +
+          '<span style="width:80px;flex-shrink:0;">' + v.name + '</span>';
+        if (choices && choices.length <= 8) {
+          html += '<select data-var="' + v.name + '" data-type="number" style="flex:1;background:var(--bg-card);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:2px 4px;font-size:12px;">';
+          choices.forEach(cv => {
+            const num = Number(cv);
+            html += '<option value="' + cv + '" ' + (String(val) === String(num) ? 'selected' : '') + '>' + cv + '</option>';
+          });
+          html += '</select>';
+        } else {
+          html += '<input type="number" data-var="' + v.name + '" data-type="number" value="' + val + '" style="flex:1;background:var(--bg-card);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:2px 4px;font-size:12px;"/>';
+        }
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+
+    // 字符串型
+    if (groups.string.length > 0) {
+      html += '<div style="margin-bottom:10px;">';
+      html += '<div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;font-weight:bold;">字符串型</div>';
+      groups.string.forEach(v => {
+        const val = STATE.evalData[v.name] ?? '';
+        html += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;">' +
+          '<span style="width:80px;flex-shrink:0;">' + v.name + '</span>' +
+          '<input type="text" data-var="' + v.name + '" data-type="string" value="' + val + '" style="flex:1;background:var(--bg-card);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:2px 4px;font-size:12px;"/>' +
+          '</div>';
+      });
+      html += '</div>';
+    }
+
+    // 任意类型
+    if (groups.any.length > 0) {
+      html += '<div style="margin-bottom:10px;">';
+      html += '<div style="font-size:11px;color:var(--text-dim);margin-bottom:4px;font-weight:bold;">其他</div>';
+      groups.any.forEach(v => {
+        const val = STATE.evalData[v.name] ?? '';
+        html += '<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:12px;">' +
+          '<span style="width:80px;flex-shrink:0;">' + v.name + '</span>' +
+          '<input type="text" data-var="' + v.name + '" data-type="any" value="' + val + '" style="flex:1;background:var(--bg-card);color:var(--text);border:1px solid var(--border);border-radius:3px;padding:2px 4px;font-size:12px;"/>' +
+          '</div>';
+      });
+      html += '</div>';
+    }
+
+    html += '<div style="border-top:1px solid var(--border);padding-top:6px;margin-top:6px;">' +
+      '<button class="btn" id="resetDataBtn" style="width:100%;font-size:11px;padding:3px;">重置所有数据</button>' +
+      '</div>';
+
+    el.innerHTML = html;
+    panel.appendChild(el);
+
+    // 绑定数据变更事件
+    el.querySelectorAll('[data-var]').forEach(inp => {
+      const varType = inp.dataset.type;
+      const handler = () => {
+        const varName = inp.dataset.var;
+        let newVal;
+        if (varType === 'boolean') {
+          newVal = inp.checked;
+        } else if (varType === 'number') {
+          newVal = Number(inp.value);
+        } else {
+          newVal = inp.value;
+        }
+        STATE.evalData[varName] = newVal;
+        if (STATE.tree) {
+          reEvaluateTree(STATE.tree, STATE.evalData);
+          renderTree();
+        }
+      };
+      inp.addEventListener(varType === 'boolean' ? 'change' : 'input', handler);
+    });
+
+    const resetBtn = el.querySelector('#resetDataBtn');
+    if (resetBtn) {
+      resetBtn.addEventListener('click', () => {
+        STATE.directiveVars.forEach(v => {
+          STATE.evalData[v.name] = v.defaultValue;
+        });
+        renderDataPanel();
+        if (STATE.tree) {
+          reEvaluateTree(STATE.tree, STATE.evalData);
+          renderTree();
+        }
+      });
+    }
+  }
+
+  function renderInspector() {
+    const propsBox = document.getElementById('propsContent');
+    const styleBox = document.getElementById('styleContent');
+
+    if (!STATE.selectedKey) {
+      propsBox.innerHTML = `<div class="no-selection">
+        从左侧拖入组件<br>或点击画布上的元素<br>以编辑其属性</div>`;
+      styleBox.innerHTML = `<div class="no-selection">选中一个元素后可编辑样式</div>`;
+      return;
+    }
+
+    const f = findNode(STATE.selectedKey);
+    if (!f) return;
+    const node = f.node;
+
+    // 元素属性
+    const nodeTag = node.tag || node.type || 'div';
+    const html = [];
+    html.push(buildProp('标签 Tag', '<input class="prop-input" value="' + escapeAttr(nodeTag) + '" readonly/>'));
+    if (node.attrs && node.attrs.value !== undefined) {
+      html.push(buildProp('文本/值 value',
+        '<input class="prop-input" data-prop-attr="value" value="' + escapeAttr(node.attrs.value) + '"/>'));
+    }
+    if (nodeTag === 'image' && node.attrs && node.attrs.src !== undefined) {
+      html.push(buildProp('图片 src',
+        '<input class="prop-input" data-prop-attr="src" value="' + escapeAttr(node.attrs.src) + '"/>'));
+    }
+    if (node.attrs && node.attrs.type !== undefined) {
+      html.push(buildProp('类型 type',
+        '<input class="prop-input" data-prop-attr="type" value="' + escapeAttr(node.attrs.type) + '"/>'));
+    }
+    if (node.classNames && node.classNames.length > 0) {
+      html.push(buildProp('Class', '<input class="prop-input" readonly value="' + escapeAttr(node.classNames.join(' ')) + '"/>'));
+    }
+    if (node.__key) {
+      html.push(buildProp('节点 Key', '<input class="prop-input" readonly value="' + escapeAttr(node.__key) + '"/>'));
+    }
+
+    // ========== 条件指令 (if / show) ==========
+    const directives = node.directives || {};
+    const ifParsed = node._ifParsed;
+    html.push('<div style="height:8px"></div>');
+    html.push('<div class="prop-row"><div class="prop-label" style="font-weight:bold;color:var(--accent);">条件指令</div></div>');
+
+    // if 指令 - 支持多种表达式类型
+    html.push('<div class="prop-row"><div class="prop-label">if 条件</div><div style="flex:1;display:flex;flex-direction:column;gap:4px;">');
+    const hasIf = 'if' in directives;
+    if (hasIf) {
+      const ifVal = directives['if'];
+      if (ifParsed) {
+        if (ifParsed.kind === 'compare') {
+          const currentVal = STATE.evalData[ifParsed.variable];
+          const currentMatch = currentVal !== undefined && String(currentVal) === ifParsed.compareValue;
+          html.push('<div style="font-size:11px;color:var(--text-dim);margin-bottom:2px;">比较表达式: <b style="color:var(--accent);">' + escapeAttr(ifParsed.variable) + '</b> === <b>' + escapeAttr(ifParsed.compareValue) + '</b></div>');
+          html.push('<div style="font-size:10px;color:var(--text-dim);margin-bottom:2px;">当前数据值: <b style="color:var(--warning);">' + (currentVal !== undefined ? escapeAttr(String(currentVal)) : '未设置') + '</b> → ' + (currentMatch ? '<span style="color:var(--success);">✓ 匹配</span>' : '<span style="color:var(--danger);">✕ 不匹配</span>') + '</div>');
+          html.push('<div style="display:flex;gap:6px;align-items:center;">' +
+            '<span style="font-size:11px;">强制预览:</span>' +
+            '<input type="checkbox" data-eval-if ' + (node._if ? 'checked' : '') + '/>' +
+            '<span style="font-size:11px;' + (node._if ? 'color:var(--success)' : 'color:var(--danger)') + '">' + (node._if ? '成立 ✓ 渲染中' : '不成立 ✕ 已移除') + '</span>' +
+            '</div>');
+        }
+        else if (ifParsed.kind === 'variable') {
+          const currentVal = STATE.evalData[ifParsed.variable];
+          html.push('<div style="font-size:11px;color:var(--text-dim);margin-bottom:2px;">变量检查: <b style="color:var(--accent);">' + escapeAttr(ifParsed.variable) + '</b></div>');
+          html.push('<div style="font-size:10px;color:var(--text-dim);margin-bottom:2px;">当前数据值: <b style="color:var(--warning);">' + (currentVal !== undefined ? escapeAttr(String(currentVal)) : '未设置') + '</b> → ' + (currentVal ? '<span style="color:var(--success);">✓ truthy</span>' : '<span style="color:var(--danger);">✕ falsy</span>') + '</div>');
+          html.push('<div style="display:flex;gap:6px;align-items:center;">' +
+            '<span style="font-size:11px;">强制预览:</span>' +
+            '<input type="checkbox" data-eval-if ' + (node._if ? 'checked' : '') + '/>' +
+            '<span style="font-size:11px;' + (node._if ? 'color:var(--success)' : 'color:var(--danger)') + '">' + (node._if ? 'true ✓ 渲染中' : 'false ✕ 已移除') + '</span>' +
+            '</div>');
+        }
+        // 类型 3: 字面量 true/false
+        else if (ifParsed.kind === 'literal') {
+          html.push('<div style="font-size:11px;color:var(--text-dim);margin-bottom:2px;">字面量: <b>' + escapeAttr(ifParsed.raw) + '</b></div>');
+          html.push('<div style="display:flex;gap:6px;align-items:center;">' +
+            '<input type="checkbox" data-eval-if ' + (node._if ? 'checked' : '') + '/>' +
+            '<span style="font-size:11px;' + (node._if ? 'color:var(--success)' : 'color:var(--danger)') + '">' + (node._if ? 'true ✓ 渲染中' : 'false ✕ 已移除') + '</span>' +
+            '</div>');
+        }
+        // 类型 4: 复合/未知表达式
+        else {
+          html.push('<div style="font-size:11px;color:var(--text-dim);margin-bottom:2px;">' +
+            (ifParsed.kind === 'complex' ? '复合表达式 (&& / ||)' : '自定义表达式') + '</div>');
+          html.push('<div style="display:flex;gap:6px;align-items:center;">' +
+            '<span style="font-size:11px;">强制预览:</span>' +
+            '<input type="checkbox" data-eval-if ' + (node._if ? 'checked' : '') + '/>' +
+            '<span style="font-size:11px;' + (node._if ? 'color:var(--success)' : 'color:var(--danger)') + '">' + (node._if ? '成立 ✓ 渲染中' : '不成立 ✕ 已移除') + '</span>' +
+            '</div>');
+        }
+      } else {
+        // 无法解析的表达式
+        html.push('<input class="prop-input" data-prop-directive="if" value="' + escapeAttr(ifVal) + '" placeholder="{{expression}} 或 true/false"/>');
+      }
+
+      // 原始值编辑（高级）
+      html.push('<div style="margin-top:4px;border-top:1px solid var(--border);padding-top:4px;">' +
+        '<div style="font-size:10px;color:var(--text-dim);margin-bottom:2px;">原始表达式</div>' +
+        '<input class="prop-input" data-prop-directive="if" value="' + escapeAttr(ifVal) + '" placeholder="如: {{bar_act===1}}"/>' +
+        '</div>');
+
+      html.push('<div style="display:flex;gap:6px;margin-top:4px;">' +
+        '<button class="btn" data-del-directive="if" style="font-size:10px;padding:2px 6px;">删除 if</button>' +
+        '</div>');
+    } else {
+      html.push('<div style="display:flex;gap:6px;">' +
+        '<button class="btn" data-add-directive="if" style="font-size:10px;padding:2px 8px;">+ 添加 if</button>' +
+        '</div>');
+    }
+    html.push('</div></div>');
+
+    // show 指令 - 纯布尔值
+    html.push('<div class="prop-row"><div class="prop-label">show 条件</div><div style="flex:1;display:flex;flex-direction:column;gap:4px;">');
+    const hasShow = 'show' in directives;
+    if (hasShow) {
+      const showVal = directives['show'];
+      const isShowLiteral = showVal === 'true' || showVal === 'false' || showVal === '1' || showVal === '0';
+      let showVarInfo = '';
+      if (!isShowLiteral && showVal.startsWith('{{')) {
+        const showParsed = parseIfExpressionClient(showVal);
+        if (showParsed && showParsed.variable && showParsed.variable !== '__unknown__' && showParsed.variable !== '__complex__' && showParsed.variable !== '__literal__') {
+          const curVal = STATE.evalData[showParsed.variable];
+          showVarInfo = '<div style="font-size:10px;color:var(--text-dim);margin-bottom:2px;">当前数据值: <b style="color:var(--warning);">' + (curVal !== undefined ? escapeAttr(String(curVal)) : '未设置') + '</b></div>';
+        }
+      }
+      html.push('<div style="font-size:11px;color:var(--text-dim);margin-bottom:2px;">显示控制: <b>' + escapeAttr(showVal) + '</b></div>');
+      html.push(showVarInfo);
+      html.push('<div style="display:flex;gap:6px;align-items:center;">' +
+        '<span style="font-size:11px;">强制预览:</span>' +
+        '<input type="checkbox" data-eval-show ' + (node._show ? 'checked' : '') + '/>' +
+        '<span style="font-size:11px;' + (node._show ? 'color:var(--success)' : 'color:var(--danger)') + '">' + (node._show ? '显示 ✓' : '隐藏 ✕') + '</span>' +
+        '</div>');
+      html.push('<div style="margin-top:4px;border-top:1px solid var(--border);padding-top:4px;">' +
+        '<div style="font-size:10px;color:var(--text-dim);margin-bottom:2px;">原始表达式</div>' +
+        '<input class="prop-input" data-prop-directive="show" value="' + escapeAttr(showVal) + '" placeholder="true/false 或 {{expression}}"/>' +
+        '</div>');
+      html.push('<div style="display:flex;gap:6px;margin-top:4px;">' +
+        '<button class="btn" data-del-directive="show" style="font-size:10px;padding:2px 6px;">删除 show</button>' +
+        '</div>');
+    } else {
+      html.push('<div style="display:flex;gap:6px;">' +
+        '<button class="btn" data-add-directive="show" style="font-size:10px;padding:2px 8px;">+ 添加 show</button>' +
+        '</div>');
+    }
+    html.push('</div></div>');
+
+    propsBox.innerHTML = html.join('');
+
+    // 绑定属性输入
+    propsBox.querySelectorAll('[data-prop-attr]').forEach(inp => {
+      inp.addEventListener('input', e => {
+        node.attrs[inp.dataset.propAttr] = inp.value;
+        renderTree();
+      });
+    });
+
+    // 绑定指令编辑
+    propsBox.querySelectorAll('[data-prop-directive]').forEach(inp => {
+      inp.addEventListener('input', e => {
+        const dir = inp.dataset.propDirective;
+        node.directives[dir] = inp.value;
+        if (dir === 'if') {
+          node._ifParsed = parseIfExpressionClient(inp.value);
+        }
+        updateNodeVisibility(node);
+        renderTree();
+      });
+    });
+
+    // 添加指令
+    propsBox.querySelectorAll('[data-add-directive]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const dir = btn.dataset.addDirective;
+        if (!node.directives) node.directives = {};
+        node.directives[dir] = dir === 'if' ? 'true' : 'true';
+        if (dir === 'if') {
+          node._if = true;
+          node._ifParsed = parseIfExpressionClient('true');
+        }
+        if (dir === 'show') node._show = true;
+        updateNodeVisibility(node);
+        renderTree();
+      });
+    });
+
+    // 删除指令
+    propsBox.querySelectorAll('[data-del-directive]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const dir = btn.dataset.delDirective;
+        delete node.directives[dir];
+        if (dir === 'if') node._if = null;
+        if (dir === 'show') node._show = null;
+        updateNodeVisibility(node);
+        renderTree();
+      });
+    });
+
+    // 预览复选框
+    propsBox.querySelectorAll('[data-eval-if]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        node._if = cb.checked;
+        updateNodeVisibility(node);
+        renderTree();
+      });
+    });
+    propsBox.querySelectorAll('[data-eval-show]').forEach(cb => {
+      cb.addEventListener('change', () => {
+        node._show = cb.checked;
+        updateNodeVisibility(node);
+        renderTree();
+      });
+    });
+
+    // 样式编辑器
+    const sh = [];
+    const styleDefs = buildStyleDefs(node);
+    styleDefs.forEach(def => {
+      const current = node.styles[def.prop] ?? '';
+      if (def.type === 'color') {
+        sh.push(buildProp(def.label, `
+          <div class="color-row">
+            <input type="color" class="color-picker" data-prop-style="${def.prop}" value="${toHex(current) || '#ffffff'}"/>
+            <input class="prop-input" data-prop-style="${def.prop}" value="${escapeAttr(current)}"/>
+          </div>`));
+      } else if (def.type === 'select') {
+        sh.push(buildProp(def.label, `
+          <select class="prop-select" data-prop-style="${def.prop}">
+            ${def.options.map(o => `<option value="${o.val}" ${o.val === current ? 'selected' : ''}>${o.label}</option>`).join('')}
+          </select>`));
+      } else if (def.type === 'textarea') {
+        sh.push(buildProp(def.label, `
+          <textarea class="prop-input" rows="2" data-prop-style="${def.prop}" placeholder="${def.placeholder||''}">${escapeAttr(current)}</textarea>`));
+      } else {
+        sh.push(buildProp(def.label, `
+          <input class="prop-input" type="${def.type||'text'}" data-prop-style="${def.prop}" value="${escapeAttr(current)}" placeholder="${def.placeholder||''}"/>`));
+      }
+    });
+    styleBox.innerHTML = sh.join('');
+
+    styleBox.querySelectorAll('[data-prop-style]').forEach(inp => {
+      const h = e => {
+        const p = inp.dataset.propStyle;
+        let v = inp.value;
+        if (v === '' || v === undefined) {
+          delete node.styles[p];
+          if (node.classNames[0]) delete STATE.styleClasses[node.classNames[0]]?.[p];
+        } else {
+          node.styles[p] = v;
+          if (node.classNames[0]) {
+            STATE.styleClasses[node.classNames[0]] = STATE.styleClasses[node.classNames[0]] || {};
+            STATE.styleClasses[node.classNames[0]][p] = v;
+          }
+        }
+        renderTree();
+      };
+      inp.addEventListener(inp.tagName === 'SELECT' ? 'change' : 'input', h);
+    });
+  }
+
+  function buildStyleDefs(node) {
+    const base = [
+      { prop: 'width',  label: '宽度 Width',  placeholder: '100px / 100% / flex:1' },
+      { prop: 'height', label: '高度 Height', placeholder: '60px / 100%' },
+      { prop: 'margin',     label: '外边距 Margin',  placeholder: '0 或 5px 10px' },
+      { prop: 'padding',    label: '内边距 Padding', placeholder: '5px 10px' },
+      { prop: 'background-color', label: '背景色', type: 'color' }
+    ];
+
+    const nodeTag = node.tag || node.type || 'div';
+    const comp = node.__comp || nodeTag;
+    if (nodeTag === 'text' || comp === 'title' || comp === 'time') {
+      return [
+        { prop: 'font-size',   label: '字号 Font Size', placeholder: '24px' },
+        { prop: 'color',       label: '字体颜色', type: 'color' },
+        { prop: 'font-weight', label: '粗细', type: 'select', options: [
+          { label: '正常', val: 'normal' }, { label: '粗体 Bold', val: 'bold' }
+        ]},
+        { prop: 'lines',       label: '最大行数 Lines', placeholder: '1 或空' },
+        { prop: 'text-overflow', label: '超出样式', type: 'select', options: [
+          { label: '省略号 Ellipsis', val: 'ellipsis' },
+          { label: '裁切 Clip', val: 'clip' }
+        ]},
+        { prop: 'width',  label: '宽度' },
+        { prop: 'height', label: '高度' },
+        { prop: 'margin', label: '外边距' }
+      ];
+    }
+
+    const layout = [
+      { prop: 'flex-direction', label: 'Flex 主轴方向', type: 'select', options: [
+        { label: '垂直 Column', val: 'column' },
+        { label: '水平 Row', val: 'row' },
+        { label: '不设置', val: '' }
+      ]},
+      { prop: 'justify-content', label: '主轴对齐', type: 'select', options: [
+        { label: '起始 flex-start', val: 'flex-start' },
+        { label: '居中 center', val: 'center' },
+        { label: '末端 flex-end', val: 'flex-end' },
+        { label: '两端 space-between', val: 'space-between' },
+        { label: '不设置', val: '' }
+      ]},
+      { prop: 'align-items', label: '交叉轴对齐', type: 'select', options: [
+        { label: '起始 flex-start', val: 'flex-start' },
+        { label: '居中 center', val: 'center' },
+        { label: '末端 flex-end', val: 'flex-end' },
+        { label: '拉伸 stretch', val: 'stretch' },
+        { label: '不设置', val: '' }
+      ]},
+      { prop: 'border-radius', label: '圆角', placeholder: '12px' },
+      { prop: 'border-width', label: '边框宽度', placeholder: '1px' },
+      { prop: 'border-color', label: '边框颜色', type: 'color' }
+    ];
+
+    return [...base, ...layout];
+  }
+
+  function buildProp(label, inner) {
+    return `<div class="prop-row"><div class="prop-label">${label}</div><div>${inner}</div></div>`;
+  }
+
+  function escapeAttr(s) { return String(s ?? '').replace(/"/g, '&quot;'); }
+
+  function toHex(v) {
+    if (!v) return null;
+    v = v.trim();
+    if (/^#([0-9a-f]{3}){1,2}$/i.test(v)) return v;
+    if (v.startsWith('rgb')) {
+      const m = v.match(/rgba?\(([^)]+)\)/);
+      if (!m) return null;
+      const parts = m[1].split(',').map(n => parseInt(n.trim()));
+      return '#' + parts.slice(0,3).map(n => n.toString(16).padStart(2,'0')).join('');
+    }
+    return null;
+  }
+
+  // ========== 节点树视图 ==========
+  function renderTreeView() {
+    const box = document.getElementById('treeView');
+    if (!STATE.tree) {
+      box.innerHTML = `<div style="color:var(--text-dim);font-size:11px;padding:8px;">（空画布）</div>`;
+      return;
+    }
+    box.innerHTML = '';
+    box.appendChild(renderTreeNode(STATE.tree, 0));
+  }
+
+  function renderTreeNode(node, depth) {
+    const tag = node.tag || node.type || '?';
+    // 自定义导入组件（如 input-method）→ 节点树中也不显示
+    const isImportedComp = STATE.imports.some(im => im.name === tag);
+    if (isImportedComp) {
+      const empty = document.createElement('div');
+      return empty;
+    }
+    const wrap = document.createElement('div');
+    const el = document.createElement('div');
+    el.className = 'tree-node' + (node.__key === STATE.selectedKey ? ' selected' : '');
+    const directives = node.directives || {};
+    const hasIf = 'if' in directives;
+    const hasShow = 'show' in directives;
+    if (hasIf && node._if === false) el.classList.add('hidden-by-if');
+    if (hasShow && node._show === false) el.classList.add('hidden-by-show');
+    el.style.setProperty('--depth', depth);
+    const comp = node.__comp || tag;
+    const isText = tag === 'text' || comp === 'title' || comp === 'time';
+    const nodeTagDisplay = tag;
+    const label = isText && node.attrs && node.attrs.value
+      ? ' <span style="opacity:.6">"' + (node.attrs.value.length > 14 ? node.attrs.value.slice(0, 14) + '…' : node.attrs.value) + '"</span>'
+      : (node.classNames && node.classNames.length
+        ? ' <span style="opacity:.5;font-size:10px;">.' + node.classNames.join('.') + '</span>'
+        : '');
+
+    // 可见性状态指示 + 切换按钮
+    let visInfo = '';
+    if (hasIf || hasShow) {
+      let dirBadges = '';
+      if (hasIf) {
+        const parsed = node._ifParsed;
+        let ifLabel = 'if';
+        if (parsed) {
+          if (parsed.kind === 'compare') {
+            ifLabel += ':' + parsed.variable + '===' + parsed.compareValue;
+          } else if (parsed.kind === 'variable') {
+            ifLabel += ':' + parsed.variable;
+          } else if (parsed.kind === 'literal') {
+            ifLabel += ':literal';
+          } else if (parsed.kind === 'complex') {
+            ifLabel += ':complex';
+          }
+        }
+        dirBadges += '<span class="dir-badge dir-if" title="if指令">' + ifLabel + '</span>';
+      }
+      if (hasShow) {
+        dirBadges += '<span class="dir-badge dir-show" title="show指令">show</span>';
+      }
+
+      const isHiddenByIf = hasIf && node._if === false;
+      const isHiddenByShow = hasShow && node._show === false;
+      const isHidden = isHiddenByIf || isHiddenByShow;
+
+      visInfo = dirBadges +
+        '<span class="tree-vis" data-vis="' + (isHidden ? 'off' : 'on') + '" title="' +
+        (isHidden ? '点击显示' : '点击隐藏') + '">' +
+        (isHidden ? '🚫' : '👁') + '</span>';
+    }
+
+    el.innerHTML = '<span class="tree-icon">' + (isText ? 'T' : ((node.children && node.children.length) ? '▸' : '·')) + '</span>' +
+      '<span>' + nodeTagDisplay + label + '</span>' +
+      visInfo +
+      '<span class="tree-delete" title="删除此节点">✕</span>';
+    el.addEventListener('click', e => {
+      if (e.target.classList.contains('tree-delete')) {
+        deleteNode(node.__key);
+        return;
+      }
+      if (e.target.classList.contains('tree-vis')) {
+        toggleNodeVisibility(node);
+        return;
+      }
+      STATE.selectedKey = node.__key;
+      renderTree();
+    });
+    wrap.appendChild(el);
+    (node.children || []).forEach(c => wrap.appendChild(renderTreeNode(c, depth + 1)));
+    return wrap;
+  }
+
+  // ========== 从 VS Code 接收解析后的数据 ==========
+  window.addEventListener('message', e => {
+    const msg = e.data;
+    if (!msg) return;
+    switch (msg.type) {
+      case 'loadContent': {
+        STATE.rawContent = msg.rawContent || '';
+        STATE.fileUri = msg.uri;
+        STATE.directiveVars = msg.directiveVars || [];
+        STATE.imports = msg.imports || [];
+        // 用脚本中的 privateData 初始化 evalData
+        if (msg.scriptData && msg.scriptData.privateData) {
+          STATE.evalData = { ...msg.scriptData.privateData };
+        }
+        // 确保所有 directiveVars 在 evalData 中有值
+        STATE.directiveVars.forEach(v => {
+          if (STATE.evalData[v.name] === undefined) {
+            STATE.evalData[v.name] = v.defaultValue;
+          }
+        });
+        if (msg.tree) {
+          STATE.tree = injectKeys(msg.tree);
+          STATE.styleClasses = msg.styleClasses || {};
+          STATE.selectedKey = null;
+        }
+        setStatus('loaded', `已解析 ${Object.keys(STATE.styleClasses).length} 个样式类，${STATE.directiveVars.length} 个条件变量`);
+        renderTree();
+        break;
+      }
+      case 'switchDevice': {
+        const target = document.querySelector(`.device-tab[data-id="${msg.deviceId}"]`);
+        if (target) target.click();
+        break;
+      }
+      case 'refresh':
+        toast('预览已刷新', 'success');
+        break;
+      case 'saveStatus':
+        if (msg.ok) { toast('保存成功 ✓', 'success'); setStatus('ok', '文件已保存'); }
+        else         { toast('保存失败: ' + msg.err, 'error'); setStatus('err', msg.err); }
+        break;
+      case 'applyStatus':
+        if (msg.ok) { toast('代码已更新到编辑器', 'success'); setStatus('ok', '已写回VS Code'); }
+        else         { toast('应用失败: ' + msg.err, 'error'); }
+        break;
+    }
+  });
+
+  function injectKeys(node) {
+    if (!node) return node;
+    node.__key = nextKey();
+    // 确保 tag 字段存在（解析树用 type，编辑器用 tag）
+    if (!node.tag && node.type) node.tag = node.type;
+    if (!node.__comp && node.tag) node.__comp = node.tag;
+    if (!node.classNames) node.classNames = [];
+    if (!node.styles) node.styles = {};
+    if (!node.children) node.children = [];
+    if (!node.attrs) node.attrs = {};
+    if (!node.events) node.events = {};
+    if (!node.directives) node.directives = {};
+    // 确保可见性字段存在
+    const directives = node.directives || {};
+    if (node._if === undefined) node._if = ('if' in directives) ? null : null;
+    if (node._show === undefined) node._show = ('show' in directives) ? null : null;
+    // 合并样式：如果有 classNames 但 styles 为空，从 STATE.styleClasses 中合并
+    if (node.classNames.length > 0 && Object.keys(node.styles).length === 0) {
+      const merged = {};
+      for (const cls of node.classNames) {
+        if (STATE.styleClasses[cls]) {
+          Object.assign(merged, STATE.styleClasses[cls]);
+        }
+      }
+      node.styles = merged;
+    }
+    // 计算初始可见性
+    updateNodeVisibility(node);
+    node.children = node.children.map(injectKeys);
+    return node;
+  }
+
+  // ========== 应用 & 保存 ==========
+  function initToolbar() {
+    document.getElementById('btnPreview').onclick = () => {
+      renderTree();
+      toast('已重新渲染', 'success');
+    };
+    document.getElementById('btnNew').onclick = () => {
+      if (!confirm('将清空当前画布，创建一个新的空白页面模板？')) return;
+      STATE.keyCounter = 1;
+      STATE.styleClasses = {
+        'page': {
+          'width': '100%', 'height': '100%',
+          'flex-direction': 'column',
+          'justify-content': 'center',
+          'align-items': 'center',
+          'background-color': '#000000'
+        },
+        'title': { 'font-size': '30px', color: '#ffffff', 'font-weight': 'bold' }
+      };
+      const textKey = nextKey();
+      const pageKey = nextKey();
+      STATE.tree = {
+        __key: pageKey, __comp: 'div', tag: 'div',
+        attrs: {}, events: {}, directives: {},
+        classNames: ['page'], styles: { ...STATE.styleClasses.page },
+        children: [{
+          __key: textKey, __comp: 'title', tag: 'text',
+          attrs: { value: 'Hello Vela' },
+          events: {}, directives: {},
+          classNames: ['title'], styles: { ...STATE.styleClasses.title },
+          children: []
+        }]
+      };
+      STATE.selectedKey = null;
+      renderTree();
+      setStatus('ok', '已新建空白模板');
+    };
+    document.getElementById('btnApply').onclick = () => {
+      const code = generateUXFromEditor();
+      if (vscode) vscode.postMessage({ type: 'applyCode', code });
+      else console.log('Generated code:\n', code);
+    };
+    document.getElementById('btnSave').onclick = () => {
+      const code = generateUXFromEditor();
+      if (vscode) vscode.postMessage({ type: 'saveFile', code });
+      else console.log('Save code:\n', code);
+    };
+  }
+
+  // 编辑器树 -> ux 代码
+  function generateUXFromEditor() {
+    const lines = [];
+    const LT = '<';
+    const GT = '>';
+    const SL = '/';
+    // template
+    lines.push(LT + 'template' + GT);
+    if (STATE.tree) lines.push(indent(generateNodeStr(STATE.tree), 2));
+    lines.push(LT + SL + 'template' + GT);
+    lines.push('');
+    // script
+    lines.push(LT + 'script' + GT);
+    lines.push('export default {');
+    lines.push('  private: {');
+    lines.push('    title: "Vela Page"');
+    lines.push('  },');
+    lines.push('  onInit() {');
+    lines.push('  }');
+    lines.push('}');
+    lines.push(LT + SL + 'script' + GT);
+    lines.push('');
+    // style
+    const styleTagOpen = LT + 'style' + GT;
+    const styleTagClose = LT + SL + 'style' + GT;
+    lines.push(styleTagOpen);
+    for (const cls in STATE.styleClasses) {
+      const props = STATE.styleClasses[cls];
+      const keys = Object.keys(props);
+      if (keys.length === 0) continue;
+      lines.push('  .' + cls + '{');
+      keys.forEach(k => { lines.push('    ' + k + ': ' + props[k] + ';'); });
+      lines.push('  }');
+    }
+    lines.push(styleTagClose);
+    return lines.join('\n');
+  }
+
+  function generateNodeStr(node, depth=0) {
+    const LT = '<';
+    const GT = '>';
+    const SL = '/';
+    const nodeTag = node.tag || node.type || 'div';
+    const parts = [nodeTag];
+    if (node.classNames?.length) parts.push('class="' + node.classNames.join(' ') + '"');
+    // 条件指令先于普通属性
+    const directives = node.directives || {};
+    for (const k in directives) {
+      if (k === 'if' || k === 'show' || k === 'for') {
+        parts.push(k + '="' + directives[k].replace(/"/g, '&quot;') + '"');
+      }
+    }
+    for (const k in (node.attrs || {})) {
+      if (k === 'class') continue;
+      parts.push(k + '="' + node.attrs[k].replace(/"/g, '&quot;') + '"');
+    }
+    for (const k in (node.events || {})) {
+      parts.push('@' + k + '="' + node.events[k] + '"');
+    }
+    const open = LT + parts.join(' ') + GT;
+    // 文本自闭合 style
+    const comp = node.__comp || nodeTag;
+    const isText = nodeTag === 'text' || comp === 'title' || comp === 'time';
+    if (isText && (!node.children || node.children.length===0)) {
+      return open.replace(GT, SL + GT);
+    }
+    if (!node.children || node.children.length === 0) {
+      return open.replace(GT, SL + GT);
+    }
+    const close = LT + SL + nodeTag + GT;
+    const childStr = node.children.map(c => generateNodeStr(c, depth+1)).join('\n');
+    return open + '\n' + indent(childStr, 2) + '\n' + close;
+  }
+
+  function indent(s, n) {
+    const pad = ' '.repeat(n);
+    return s.split('\n').map(l => pad + l).join('\n');
+  }
+
+  // ========== 状态栏 ==========
+  function setStatus(kind, text) {
+    const right = document.getElementById('statusRight');
+    right.className = kind === 'ok' ? 'ok' : (kind === 'err' ? 'err' : '');
+    right.textContent = text;
+  }
+
+  // ========== 入口 ==========
+  function init() {
+    initPalette();
+    initDeviceTabs();
+    initZoom();
+    initCanvasDrop();
+    initToolbar();
+    renderDevice();
+    setTimeout(() => {
+      // 请求 VS Code 端提供文件内容
+      if (vscode) vscode.postMessage({ type: 'requestInit' });
+    }, 0);
+  }
+  init();
+})();
+</script>
+</body>
+</html>

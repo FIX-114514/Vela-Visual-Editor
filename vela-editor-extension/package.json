@@ -1,0 +1,111 @@
+{
+  "name": "vela-visual-editor",
+  "displayName": "Vela JS Visual Editor",
+  "description": "图形化编辑VelaJS代码的VS Code扩展",
+  "version": "0.1.0",
+  "publisher": "FIX114514",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "activationEvents": [
+    "onCommand:vela-editor.openEditor",
+    "onCustomEditor:velaEditor.ux"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "vela-editor.openEditor",
+        "title": "Vela: 打开可视化编辑器",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "vela-editor.switchDevice",
+        "title": "Vela: 切换设备型号"
+      },
+      {
+        "command": "vela-editor.refreshPreview",
+        "title": "Vela: 刷新预览",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "vela-editor.saveBack",
+        "title": "Vela: 保存修改回ux文件",
+        "icon": "$(save)"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "when": "resourceExtname == .ux",
+          "command": "vela-editor.openEditor",
+          "group": "navigation"
+        }
+      ],
+      "editor/title": [
+        {
+          "when": "resourceExtname == .ux",
+          "command": "vela-editor.openEditor",
+          "group": "navigation",
+          "alt": "vela-editor.openEditor"
+        }
+      ]
+    },
+    "customEditors": [
+      {
+        "viewType": "velaEditor.ux",
+        "displayName": "Vela Visual Editor",
+        "selector": [
+          {
+            "filenamePattern": "*.ux"
+          }
+        ],
+        "priority": "option"
+      }
+    ],
+    "configuration": {
+      "title": "Vela Visual Editor",
+      "properties": {
+        "velaEditor.defaultDevice": {
+          "type": "string",
+          "default": "band9pro",
+          "enum": [
+            "watchs4",
+            "band9pro",
+            "band9",
+            "redmiwatch5"
+          ],
+          "enumDescriptions": [
+            "Xiaomi Watch S (圆形 466x466)",
+            "Xiaomi Band Pro (矩形 336x480)",
+            "Xiaomi Band (胶囊形 192x490)",
+            "Redmi Watch (矩形 432x514)"
+          ],
+          "description": "默认显示的设备型号"
+        },
+        "velaEditor.canvasScale": {
+          "type": "number",
+          "default": 0.8,
+          "minimum": 0.3,
+          "maximum": 2,
+          "description": "画布缩放比例"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./ && npm run copy-webview",
+    "watch": "tsc -watch -p ./",
+    "copy-webview": "node -e \"const fs=require('fs'),path=require('path');const s='src/webview',d='out/webview';if(!fs.existsSync(d))fs.mkdirSync(d,{recursive:true});fs.readdirSync(s).forEach(f=>fs.copyFileSync(path.join(s,f),path.join(d,f)));console.log('webview copied');\""
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.130",
+    "@types/vscode": "^1.80.0",
+    "typescript": "^5.0.0"
+  }
+}
